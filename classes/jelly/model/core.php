@@ -219,6 +219,7 @@ abstract class Jelly_Model_Core
 	protected function _where($builder, $model, array $values)
 	{
 
+		// Check for an outer and/or indexed array
 		$where = 'where';
 		if(isset($values['or']))
 		{
@@ -308,19 +309,24 @@ abstract class Jelly_Model_Core
 	{
 
 		$model = $this->_meta->model();
-		$name = (is_object($field))
-			? $field->name
-			: $field;
-		$field = (is_object($field))
-			? $field
-			: $this->_meta->fields($field);
-
-		if (!$field)
+		if($field instanceof Jelly_Field_Core)
 		{
-			throw new Kohana_Exception('":field" is not a valid field',
-				array(':field' => $name));
+			$name = $field->name;
 		}
-
+		elseif(is_string($field))
+		{
+			$name = $field;
+			if ( ! $field = $this->_meta->fields($field))
+			{
+				throw new Kohana_Exception('":field" is not a valid :model field',
+					array(':field' => $name, ':model' => $model));
+			}
+		}
+		else
+		{
+			throw new Kohana_Exception('Invalid value passed as field');
+		}
+		
 		if ($field instanceof Jelly_Field_Relationship)
 		{
 			// Call the correct function...
@@ -328,12 +334,13 @@ abstract class Jelly_Model_Core
 		}
 
 		$builder = Jelly::select($model)->select($model . '.*');
+		$count = count($values);
 
-		if(count($values) == 2)
+		if($count == 2)
 		{
 			return $builder->where($model . '.' . $name, $values[0], $values[1])->execute();
 		}
-		elseif(count($values) == 1)
+		elseif($count == 1)
 		{
 			if(is_array($values[0]))
 			{
@@ -362,32 +369,38 @@ abstract class Jelly_Model_Core
 	{
 
 		$model = $this->_meta->model();
-		$name = (is_object($field))
-			? $field->name
-			: $field;
-		$field = (is_object($field))
-			? $field
-			: $this->_meta->fields($field);
+		if($field instanceof Jelly_Field_Core)
+		{
+			$name = $field->name;
+		}
+		elseif(is_string($field))
+		{
+			$name = $field;
+			if ( ! $field = $this->_meta->fields($field))
+			{
+				throw new Kohana_Exception('":field" is not a valid :model field',
+					array(':field' => $name, ':model' => $model));
+			}
+		}
+		else
+		{
+			throw new Kohana_Exception('Invalid value passed as field');
+		}
 
 		if (empty($values))
 		{
 			throw new Kohana_Exception('function values can not be empty');
 		}
 
-		if (!$field)
-		{
-			throw new Kohana_Exception('":field" is not a valid :model field',
-				array(':field' => $name, ':model' => $model));
-		}
 
-		if (!$field instanceof Jelly_Field_Relationship)
+		if ( ! $field instanceof Jelly_Field_Relationship)
 		{
 			throw new Kohana_Exception('":field" is not a related field',
 				array(':field' => $name));
 		}
 
 		$foreign_model = $field->foreign['model'];
-		$builder = Jelly::select($model)
+		$builder = Jelly::select($model)->distinct(TRUE)
 			->select($model . '.*');
 
 		if ($field instanceof Jelly_Field_ManyToMany)
