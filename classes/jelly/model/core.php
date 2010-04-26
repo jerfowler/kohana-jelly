@@ -190,6 +190,242 @@ abstract class Jelly_Model_Core
 	}
 
 	/**
+	 * Dynamic class methods
+	 *
+	 * @param   string  $name
+	 * @param   mixed   $arguments
+	 * @return  void
+	 */
+	public function __call($name, $arguments)
+	{
+		$dynamics = array('get_by_related', 'get_by');
+		foreach ($dynamics as $dynamic)
+		{
+			if (strpos($name, $dynamic.'_') !== FALSE)
+			{
+				return $this->$dynamic(substr($name, strlen($dynamic.'_')), $arguments);
+			}
+		}
+	}
+
+	/**
+	 * Generates a builder where clause based on the provided values
+	 *
+	 * @param   Jelly_Builder   $builder
+	 * @param   string  $model  Model name used in the where clause
+	 * @param   mixed   $values argument list used to construct the clause
+	 * @return  Jelly_Builder
+	 */
+	protected function _where($builder, $model, array $values)
+	{
+
+		$where = 'where';
+		if(isset($values['or']))
+		{
+			$where = 'or_where';
+			$values = is_array($values['or']) 
+				? $values['or'] 
+				: array($values['or']);
+		}
+		elseif(isset($values['and']))
+		{
+			$where = 'and_where';
+			$values = is_array($values['and']) 
+				? $values['and'] 
+				: array($values['and']);
+		}
+		$count = count($values);
+
+		/* One Argument is passed, can be:
+		 *  interger - for the primary key lookup
+		 *  string   - for the name key lookup
+		 *  object   - a loaded model of the same class
+		 */
+		if ($count == 1)
+		{
+			if (is_integer($values[0]))
+			{
+				return $builder->$where($model . '.:primary_key', '=', $values[0]);
+			}
+			elseif (is_string($values[0]))
+			{
+				return $builder->$where($model . '.:name_key', '=', $values[0]);
+			}
+			elseif (is_object($values[0]))
+			{
+				$class = Jelly::class_name($model);
+				if ($values[0] instanceof $class)
+				{
+					return $builder->where($model . '.:primary_key', '=', $values[0]->id());
+				}
+			}
+		}
+
+		/*
+		 *  Two arguments are passed:
+		 *   first argument is the field name of the foregin model
+		 *   second argument is the value of that field
+		 *   equal operator is used
+		 */
+		elseif ($count == 2)
+		{
+			if ( ! Jelly::meta($model)->fields($values[0]))
+			{
+				throw new Kohana_Exception('":field" is not a valid :model field',
+					array(':field' => $values[0], ':model' => $model));
+			}
+			return $builder->$where($model . '.' . $values[0], '=', $values[1]);
+		}
+
+		/*
+		 *  Three arguments are passed:
+		 *   first argument is the field name of the foregin model
+		 *   second argument is the operator used
+		 *   third argument is the value of that field
+		 */
+		elseif ($count == 3)
+		{
+			if ( ! Jelly::meta($model)->fields($values[0]))
+			{
+				throw new Kohana_Exception('":field" is not a valid :model field',
+					array(':field' => $values[0], ':model' => $model));
+			}
+			return $builder->$where($model . '.' . $values[0], $values[1], $values[2]);
+		}
+
+		// Not Supported
+		throw new Kohana_Exception('invalid or unsupported argument');
+	}
+
+	/**
+	 * Loads the current model by a field value
+	 *
+	 * @param   string  $field  The field name
+	 * @param   mixed   $values  An array of values used in the where clause
+	 * @return  Jelly_Collection
+	 */
+	public function get_by($field, array $values)
+	{
+
+		$model = $this->_meta->model();
+		$name = (is_object($field))
+			? $field->name
+			: $field;
+		$field = (is_object($field))
+			? $field
+			: $this->_meta->fields($field);
+
+		if (!$field)
+		{
+			throw new Kohana_Exception('":field" is not a valid field',
+				array(':field' => $name));
+		}
+
+		if ($field instanceof Jelly_Field_Relationship)
+		{
+			// Call the correct function...
+			return $this->get_by_related($field, $values);
+		}
+
+		$builder = Jelly::select($model)->select($model . '.*');
+
+		if(count($values) == 2)
+		{
+			return $builder->where($model . '.' . $name, $values[0], $values[1])->execute();
+		}
+		elseif(count($values) == 1)
+		{
+			if(is_array($values[0]))
+			{
+				return $builder->where($model . '.' . $name, 'IN', $values[0])->execute();
+			}
+			else
+			{
+				return $builder->where($model . '.' . $name, '=', $values[0])->execute();
+			}
+		}
+		else
+		{
+			throw new Kohana_Exception('invalid or unsupported arguments');
+		}
+
+	}
+
+	/**
+	 * Loads the current model by a related field
+	 *
+	 * @param   string  $field  The related field name
+	 * @param   mixed   $values  An array of values used in the where clause
+	 * @return  Jelly_Collection
+	 */
+	public function get_by_related($field, array $values)
+	{
+
+		$model = $this->_meta->model();
+		$name = (is_object($field))
+			? $field->name
+			: $field;
+		$field = (is_object($field))
+			? $field
+			: $this->_meta->fields($field);
+
+		if (empty($values))
+		{
+			throw new Kohana_Exception('function values can not be empty');
+		}
+
+		if (!$field)
+		{
+			throw new Kohana_Exception('":field" is not a valid :model field',
+				array(':field' => $name, ':model' => $model));
+		}
+
+		if (!$field instanceof Jelly_Field_Relationship)
+		{
+			throw new Kohana_Exception('":field" is not a related field',
+				array(':field' => $name));
+		}
+
+		$foreign_model = $field->foreign['model'];
+		$builder = Jelly::select($model)
+			->select($model . '.*');
+
+		if ($field instanceof Jelly_Field_ManyToMany)
+		{
+			$join_col1 = $model . '.:primary_key';
+			$join_col2 = $field->through['model'] . '.' . $field->through['columns'][0];
+			$builder->join($field->through['model'])->on($join_col1, '=', $join_col2);
+
+			$join_col1 = $field->through['model'] . '.' . $field->through['columns'][1];
+			$join_col2 = $foreign_model . '.:primary_key';
+			$builder->join($foreign_model)->on($join_col1, '=', $join_col2);
+		}
+		else
+		{
+			$join_col1 = ($field instanceof Jelly_Field_BelongsTo)
+				? $model . '.' . $field->column     // BelongsTo
+				: $model . '.:primary_key';       // HasMany & HasOne
+
+			$join_col2 = $foreign_model . '.' . $field->foreign['column'];
+			$builder->join($foreign_model)->on($join_col1, '=', $join_col2);
+		}
+
+		if(is_array($values[0]))
+		{
+			foreach($values as $key => $value)
+			{
+				$builder = $this->_where($builder, $foreign_model, $value);
+			}
+		}
+		else
+		{
+			$builder = $this->_where($builder, $foreign_model, $values);
+		}
+
+		return $builder->execute();
+	}
+
+	/**
 	 * Gets the internally represented value from a field or unmapped column.
 	 *
 	 * Relationships that are returned are raw Jelly_Builders, and must be

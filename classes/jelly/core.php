@@ -13,7 +13,7 @@ abstract class Jelly_Core
 	 */
 	protected static $_prefix = 'model_';
 	
-        /**
+	/**
 	 * @var  string  This prefix to use for all model's field classes
 	 *               This can be overridden to allow you to place
 	 *               field classes in a different location.
