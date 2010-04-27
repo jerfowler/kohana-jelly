@@ -16,7 +16,7 @@
  *
  * @package  Jelly
  */
-class Jelly_Collection_Core implements Iterator, Countable, SeekableIterator, ArrayAccess
+class Jelly_Collection_Core implements Iterator, Countable, SeekableIterator, ArrayAccess, Serializable
 {
 	/**
 	 * @var  Jelly  The current model we're placing results into
@@ -49,21 +49,58 @@ class Jelly_Collection_Core implements Iterator, Countable, SeekableIterator, Ar
 
 		$this->_result = $result;
 	}
+	
+	/**
+	 * Allows a class to decide how it will react when it is converted to a string
+	 * @return  string
+	 */
+	public function __toString()
+	{
+		return 'Jelly_Collection: '.Jelly::model_name($this->_model).' ('.$this->count().')';
+	}
+
+//	/**
+//	 * Converts MySQL Results to Cached Results, since MySQL resources are not serializable.
+//	 * 
+//	 * REMOVED - Not used when using the Serializable interface
+//	 * 
+//	 * @return  array
+//	 */
+//	public function __sleep()
+//	{
+//		if ($this->_result instanceof Database_MySQL_Result)
+//		{
+//			$this->_result = new Database_Result_Cached($this->_result->as_array(), '');
+//		}
+//
+//		return array_keys(get_object_vars($this));
+//	}
 
 	/**
-	 * Converts MySQL Results to Cached Results, since MySQL resources are not serializable.
-	 *
-	 * @return  array
+	 * Implementation of the Serializable interface
+	 * @return  string
 	 */
-	public function __sleep()
+	public function serialize()
 	{
-		if ($this->_result instanceof Database_MySQL_Result)
-		{
-			$this->_result = new Database_Result_Cached($this->_result->as_array(), '');
-		}
-
-		return array_keys(get_object_vars($this));
+		return serialize(array(
+			'_model' => Jelly::model_name($this->_model),
+			'_result' => $this->_result->as_array()
+		));
 	}
+
+	/**
+	 * Implementation of the Serializable interface
+	 * @return  $this
+	 */
+	public function unserialize($serialized)
+	{
+		$data = unserialize($serialized);
+		$this->_model = Jelly::factory($data['_model']);
+		$this->_result = new Database_Result_Cached($data['_result'], '');
+		return $this;
+	}
+
+
 
 	/**
 	 * Return all of the rows in the result as an array.

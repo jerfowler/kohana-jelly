@@ -6,7 +6,7 @@
  *
  * @package Jelly
  */
-abstract class Jelly_Model_Core
+abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, ArrayAccess
 {
 	/**
 	 * @var  array  The original data set on the object
@@ -209,6 +209,99 @@ abstract class Jelly_Model_Core
 	}
 
 	/**
+	 * Implementation of the Serializable interface
+	 * @return  string
+	 */
+	public function serialize()
+	{
+		return serialize(array(
+			'_original' => ($this->_loaded) ? $this->_original : null,
+			'_changed' => $this->_changed,
+			// Probly best to ignore cached data....
+			// '_retrieved' => $this->_retrieved,
+			'_unmapped' => $this->_unmapped
+		));
+	}
+
+	/**
+	 * Implementation of the Serializable interface
+	 * @return  $this
+	 */
+	public function unserialize($serialized)
+	{
+		$data = unserialize($serialized);
+		$this->_meta = Jelly::meta($this);
+		$this->_original = $this->_meta->defaults();
+		$this->_unmapped = $data['_unmapped'];
+		// Probly best to ignore cached data....
+		// $this->_retrieved = $data['_retrieved'];
+		if ( ! empty($data['_original']))
+		{
+			$this->load_values($data['_original']);
+		}
+
+		if ( ! empty($data['_changed']))
+		{
+			$this->set($data['_changed']);
+		}
+
+		return $this;
+	}
+
+	/**
+	 * Implementation of the IteratorAggregate interface
+	 * @return  ArrayIterator
+	 */
+	public function getIterator()
+	{
+		return new ArrayIterator($this->as_array());
+	}
+
+	/**
+	 * Implementation of the ArrayAccess interface
+	 * @return void
+	 */
+	public function offsetSet($offset, $value)
+	{
+		$keys = array_keys($this->_meta->fields());
+		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		$this->$offset = $value;
+	}
+
+	/**
+	 * Implementation of the ArrayAccess interface
+	 * @return boolean
+	 */
+	public function offsetExists($offset)
+	{
+		$keys = array_keys($this->_meta->fields());
+		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		return isset($this->$offset);
+	}
+
+	/**
+	 * Implementation of the ArrayAccess interface
+	 * @return void
+	 */
+	public function offsetUnset($offset)
+	{
+		$keys = array_keys($this->_meta->fields());
+		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		unset($this->$offset);
+	}
+
+	/**
+	 * Implementation of the ArrayAccess interface
+	 * @return mixed
+	 */
+	public function offsetGet($offset)
+	{
+		$keys = array_keys($this->_meta->fields());
+		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		return $this->$offset;
+	}
+
+	/**
 	 * Generates a builder where clause based on the provided values
 	 *
 	 * @param   Jelly_Builder   $builder
@@ -224,15 +317,15 @@ abstract class Jelly_Model_Core
 		if(isset($values['or']))
 		{
 			$where = 'or_where';
-			$values = is_array($values['or']) 
-				? $values['or'] 
+			$values = is_array($values['or'])
+				? $values['or']
 				: array($values['or']);
 		}
 		elseif(isset($values['and']))
 		{
 			$where = 'and_where';
-			$values = is_array($values['and']) 
-				? $values['and'] 
+			$values = is_array($values['and'])
+				? $values['and']
 				: array($values['and']);
 		}
 		$count = count($values);
@@ -309,9 +402,9 @@ abstract class Jelly_Model_Core
 	{
 
 		$model = $this->_meta->model();
-		if($field instanceof Jelly_Field_Core)
+		if($field instanceof Jelly_Field)
 		{
-			$name = $field->name;
+		    $name = $field->name;
 		}
 		elseif(is_string($field))
 		{
@@ -326,7 +419,7 @@ abstract class Jelly_Model_Core
 		{
 			throw new Kohana_Exception('Invalid value passed as field');
 		}
-		
+
 		if ($field instanceof Jelly_Field_Relationship)
 		{
 			// Call the correct function...
@@ -369,7 +462,7 @@ abstract class Jelly_Model_Core
 	{
 
 		$model = $this->_meta->model();
-		if($field instanceof Jelly_Field_Core)
+		if($field instanceof Jelly_Field)
 		{
 			$name = $field->name;
 		}
