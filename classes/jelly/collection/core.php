@@ -51,7 +51,7 @@ class Jelly_Collection_Core implements Iterator, Countable, SeekableIterator, Ar
 	}
 	
 	/**
-	 * Allows a class to decide how it will react when it is converted to a string
+	 * How this object reacts when converted to a string
 	 * @return  string
 	 */
 	public function __toString()
@@ -95,8 +95,12 @@ class Jelly_Collection_Core implements Iterator, Countable, SeekableIterator, Ar
 	public function unserialize($serialized)
 	{
 		$data = unserialize($serialized);
-		$this->_model = Jelly::factory($data['_model']);
-		$this->_result = new Database_Result_Cached($data['_result'], '');
+		$this->_model = (isset($data['_model'])) 
+			? Jelly::factory($data['_model'])
+			: NULL;
+		$this->_result = (isset($data['_result']))
+			? new Database_Result_Cached($data['_result'], '')
+			: new Database_Result_Cached(array(), '');
 		return $this;
 	}
 

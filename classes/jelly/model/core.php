@@ -209,6 +209,16 @@ abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, Arra
 	}
 
 	/**
+	 * How this object reacts when converted to a string
+	 *
+	 * @return  string
+	 */
+	public function __toString()
+	{
+		return 'Jelly_Model: '.Jelly::model_name($this->_model).' - '.$this->name();
+	}
+
+  	/**
 	 * Implementation of the Serializable interface
 	 * @return  string
 	 */
@@ -232,7 +242,9 @@ abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, Arra
 		$data = unserialize($serialized);
 		$this->_meta = Jelly::meta($this);
 		$this->_original = $this->_meta->defaults();
-		$this->_unmapped = $data['_unmapped'];
+		$this->_unmapped = (isset($data['_unmapped']))
+			? $data['_unmapped']
+			: $this->_unmapped;
 		// Probly best to ignore cached data....
 		// $this->_retrieved = $data['_retrieved'];
 		if ( ! empty($data['_original']))
@@ -263,8 +275,15 @@ abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, Arra
 	 */
 	public function offsetSet($offset, $value)
 	{
-		$keys = array_keys($this->_meta->fields());
-		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		if($offset === NULL)
+		{
+			throw new Kohana_Exception('Append syntax not supported, you must supply an offset');
+		}
+		elseif(is_integer($offset))
+		{
+			$keys = array_keys($this->_meta->fields());
+			$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		}
 		$this->$offset = $value;
 	}
 
@@ -274,9 +293,13 @@ abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, Arra
 	 */
 	public function offsetExists($offset)
 	{
-		$keys = array_keys($this->_meta->fields());
-		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
-		return isset($this->$offset);
+		$fields = $this->_meta->fields();
+		if(is_integer($offset))
+		{
+			$keys = array_keys($fields);
+			$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		}
+		return array_key_exists($offset, $fields+$this->_unmapped);
 	}
 
 	/**
@@ -285,8 +308,11 @@ abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, Arra
 	 */
 	public function offsetUnset($offset)
 	{
-		$keys = array_keys($this->_meta->fields());
-		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		if(is_integer($offset))
+		{
+			$keys = array_keys($fields);
+			$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		}
 		unset($this->$offset);
 	}
 
@@ -296,8 +322,11 @@ abstract class Jelly_Model_Core implements Serializable, IteratorAggregate, Arra
 	 */
 	public function offsetGet($offset)
 	{
-		$keys = array_keys($this->_meta->fields());
-		$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		if(is_integer($offset))
+		{
+			$keys = array_keys($fields);
+			$offset = (isset($keys[$offset])) ? $keys[$offset] : $offset;
+		}
 		return $this->$offset;
 	}
 
